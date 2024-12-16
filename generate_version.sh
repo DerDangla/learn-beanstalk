@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Fetch the latest tag (or default to v1.0.0 if no tag exists)
+# Fetch the latest tag
 latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
 
-# Extract the version components
+# Extract version components
 major=$(echo $latest_tag | cut -d. -f1 | cut -dv -f2)
 minor=$(echo $latest_tag | cut -d. -f2)
 patch=$(echo $latest_tag | cut -d. -f3)
@@ -12,9 +12,12 @@ patch=$(echo $latest_tag | cut -d. -f3)
 new_patch=$((patch + 1))
 new_version="v${major}.${minor}.${new_patch}"
 
-# Output the new version
-echo "New version: $new_version"
-
-# Tag the new version and push it
-git tag -a "$new_version" -m "Release $new_version"
-git push origin "$new_version"
+# Check if the tag already exists
+if git rev-parse "$new_version" >/dev/null 2>&1; then
+    echo "Tag $new_version already exists. Skipping tag creation."
+else
+    # Create and push the new tag
+    echo "New version: $new_version"
+    git tag -a "$new_version" -m "Release $new_version"
+    git push origin "$new_version"
+fi
