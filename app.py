@@ -13,7 +13,7 @@ log_group_name = "YourAppLogGroup"
 log_stream_name = "ApplicationLogs"
 
 # Initialize boto3 client
-client = boto3.client('logs', region_name='ca-central-1')  # Replace 'your-region'
+client = boto3.client('logs', region_name='ca-central-1')
 
 # Create log group and stream if they don't exist
 try:

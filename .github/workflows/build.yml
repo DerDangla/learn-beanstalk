@@ -18,6 +18,13 @@ jobs:
         with:
           python-version: 3.9
 
+      - name: Configure AWS Credentials
+        id: aws-creds
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::730335337132:role/learn-beanstalk-role
+          aws-region: "ca-central-1"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
