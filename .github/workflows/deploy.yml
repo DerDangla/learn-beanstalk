@@ -59,6 +59,11 @@ jobs:
             --version-label ${{ github.sha }} \
             --option-settings file://options.json
 
+          aws elasticbeanstalk wait environment-updated \
+            --application-name "HelloWorldApp" \
+            --environment-name "HelloWorldEnvironment" \
+            --region ca-central-1
+
           aws elasticbeanstalk update-environment \
             --environment-name "HelloWorldEnvironment" \
             --version-label ${{ github.sha }}
