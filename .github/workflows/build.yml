@@ -1,4 +1,4 @@
-name: Build and Test
+name: Build, Test, and Tag
 
 on:
   push:
@@ -28,6 +28,11 @@ jobs:
           python app.py &
           sleep 5
           curl http://127.0.0.1:8000
+
+      - name: Set up Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
 
       - name: Generate Semantic Version
         run: |
