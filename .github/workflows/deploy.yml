@@ -34,6 +34,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Create Elastic Beanstalk Application (if not exists)
+        run: |
+          aws elasticbeanstalk describe-applications --region ca-central-1 | grep -q '"ApplicationName": "HelloWorldApp"' || \
+          aws elasticbeanstalk create-application --application-name "HelloWorldApp" --region ca-central-1
+
       - name: Deploy to Elastic Beanstalk
         run: |
           zip -r app.zip .
