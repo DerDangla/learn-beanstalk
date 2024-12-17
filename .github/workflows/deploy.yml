@@ -34,36 +34,49 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Create Elastic Beanstalk Application (if not exists)
+      - name: Ensure Elastic Beanstalk Application Exists
         run: |
-          aws elasticbeanstalk describe-applications --region ca-central-1 | grep -q '"ApplicationName": "HelloWorldApp"' || \
-          aws elasticbeanstalk create-application --application-name "HelloWorldApp" --region ca-central-1
+          aws elasticbeanstalk describe-applications --application-names "HelloWorldApp" --region ca-central-1 || \
+          aws elasticbeanstalk create-application \
+            --application-name "HelloWorldApp" \
+            --region ca-central-1
 
-      - name: Deploy to Elastic Beanstalk
+      - name: Package Application for Deployment
         run: |
           zip -r app.zip .
           aws s3 cp app.zip s3://elasticbeanstalk-ca-central-1-$(aws sts get-caller-identity --query Account --output text)/app.zip
 
+      - name: Create New Application Version
+        run: |
           aws elasticbeanstalk create-application-version \
             --application-name "HelloWorldApp" \
             --version-label ${{ github.sha }} \
             --source-bundle S3Bucket="elasticbeanstalk-ca-central-1-$(aws sts get-caller-identity --query Account --output text)",S3Key="app.zip"
 
-      - name: Create or Update Elastic Beanstalk Environment
+      - name: Deploy to Elastic Beanstalk Environment
         run: |
-          aws elasticbeanstalk describe-environments --application-name "HelloWorldApp" --region ca-central-1 | grep -q '"EnvironmentName": "HelloWorldEnvironment"' || \
-          aws elasticbeanstalk create-environment \
-            --application-name "HelloWorldApp" \
-            --environment-name "HelloWorldEnvironment" \
-            --solution-stack-name "64bit Amazon Linux 2023 v4.3.1 running Python 3.12" \
-            --version-label ${{ github.sha }} \
-            --option-settings file://options.json
+          ENV_NAME="HelloWorldEnvironment"
+          STACK_NAME="64bit Amazon Linux 2023 v4.3.1 running Python 3.12"
+          OPTIONS_FILE="options.json"
 
-          aws elasticbeanstalk wait environment-updated \
-            --application-name "HelloWorldApp" \
-            --environment-name "HelloWorldEnvironment" \
-            --region ca-central-1
+          # Create Environment if it doesn't exist
+          if ! aws elasticbeanstalk describe-environments \
+              --application-name "HelloWorldApp" \
+              --environment-names "$ENV_NAME" \
+              --region ca-central-1 | grep -q '"Status": "Ready"'; then
+            aws elasticbeanstalk create-environment \
+              --application-name "HelloWorldApp" \
+              --environment-name "$ENV_NAME" \
+              --solution-stack-name "$STACK_NAME" \
+              --version-label "${{ github.sha }}" \
+              --option-settings file://$OPTIONS_FILE
+          else
+            # Update Existing Environment
+            aws elasticbeanstalk update-environment \
+              --environment-name "$ENV_NAME" \
+              --version-label "${{ github.sha }}"
+          fi
 
-          aws elasticbeanstalk update-environment \
-            --environment-name "HelloWorldEnvironment" \
-            --version-label ${{ github.sha }}
+      - name: Clean Up
+        run: |
+          rm -f app.zip
