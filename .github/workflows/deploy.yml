@@ -36,10 +36,14 @@ jobs:
 
       - name: Ensure Elastic Beanstalk Application Exists
         run: |
-          aws elasticbeanstalk describe-applications --application-names "HelloWorldApp" --region ca-central-1 || \
+          APP_NAME="HelloWorldApp"
+          aws elasticbeanstalk describe-applications --application-names "$APP_NAME" --region ca-central-1 || \
           aws elasticbeanstalk create-application \
-            --application-name "HelloWorldApp" \
+            --application-name "$APP_NAME" \
             --region ca-central-1
+
+          echo "Waiting for the application to be available..."
+          aws elasticbeanstalk describe-applications --application-names "$APP_NAME" --region ca-central-1 --output text
 
       - name: Package Application for Deployment
         run: |
@@ -48,16 +52,22 @@ jobs:
 
       - name: Create New Application Version
         run: |
+          APP_NAME="HelloWorldApp"
+          VERSION_LABEL="${{ github.sha }}"
+          BUCKET_NAME="elasticbeanstalk-ca-central-1-$(aws sts get-caller-identity --query Account --output text)"
+
+          echo "Creating application version: $VERSION_LABEL"
           aws elasticbeanstalk create-application-version \
-            --application-name "HelloWorldApp" \
-            --version-label ${{ github.sha }} \
-            --source-bundle S3Bucket="elasticbeanstalk-ca-central-1-$(aws sts get-caller-identity --query Account --output text)",S3Key="app.zip"
+            --application-name "$APP_NAME" \
+            --version-label "$VERSION_LABEL" \
+            --source-bundle S3Bucket="$BUCKET_NAME",S3Key="app.zip"
 
       - name: Deploy to Elastic Beanstalk Environment
         run: |
           ENV_NAME="HelloWorldEnvironment"
           STACK_NAME="64bit Amazon Linux 2023 v4.3.1 running Python 3.12"
           OPTIONS_FILE="options.json"
+          VERSION_LABEL="${{ github.sha }}"
 
           # Create Environment if it doesn't exist
           if ! aws elasticbeanstalk describe-environments \
@@ -68,13 +78,13 @@ jobs:
               --application-name "HelloWorldApp" \
               --environment-name "$ENV_NAME" \
               --solution-stack-name "$STACK_NAME" \
-              --version-label "${{ github.sha }}" \
+              --version-label "$VERSION_LABEL" \
               --option-settings file://$OPTIONS_FILE
           else
             # Update Existing Environment
             aws elasticbeanstalk update-environment \
               --environment-name "$ENV_NAME" \
-              --version-label "${{ github.sha }}"
+              --version-label "$VERSION_LABEL"
           fi
 
       - name: Clean Up
