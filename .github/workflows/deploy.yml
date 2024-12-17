@@ -34,55 +34,56 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Zip Application Files
+        run: |
+          zip -r app.zip . -x "*.git*"
+
+      - name: Upload Application to S3
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          S3_BUCKET="elasticbeanstalk-ca-central-1-${ACCOUNT_ID}"
+          aws s3 cp app.zip s3://${S3_BUCKET}/app-${{ github.sha }}.zip
+          echo "S3_BUCKET=${S3_BUCKET}" >> $GITHUB_ENV
+
       - name: Create Elastic Beanstalk Application (if not exists)
         run: |
-          APP_NAME="HelloWorldApp"
-          if ! aws elasticbeanstalk describe-applications --application-names "$APP_NAME" --region ca-central-1 > /dev/null 2>&1; then
-            echo "Creating Elastic Beanstalk application: $APP_NAME"
-            aws elasticbeanstalk create-application \
-              --application-name "$APP_NAME" \
-              --description "Elastic Beanstalk application for HelloWorldApp" \
-              --region ca-central-1
-          else
-            echo "Elastic Beanstalk application $APP_NAME already exists."
-          fi
-
-      - name: Package Application for Deployment
-        run: |
-          zip -r app.zip .
-          aws s3 cp app.zip s3://elasticbeanstalk-ca-central-1-$(aws sts get-caller-identity --query Account --output text)/app.zip
+          aws elasticbeanstalk describe-applications --region ca-central-1 \
+          --query "Applications[?ApplicationName=='HelloWorldApp']" --output text || \
+          aws elasticbeanstalk create-application --application-name "HelloWorldApp" --region ca-central-1
 
       - name: Create New Application Version
         run: |
           aws elasticbeanstalk create-application-version \
             --application-name "HelloWorldApp" \
-            --version-label ${{ github.sha }} \
-            --source-bundle S3Bucket="elasticbeanstalk-ca-central-1-$(aws sts get-caller-identity --query Account --output text)",S3Key="app.zip"
+            --version-label "${{ github.sha }}" \
+            --source-bundle S3Bucket=${{ env.S3_BUCKET }},S3Key=app-${{ github.sha }}.zip
 
-      - name: Deploy to Elastic Beanstalk Environment
+      - name: Create or Update Elastic Beanstalk Environment
         run: |
           ENV_NAME="HelloWorldEnvironment"
           STACK_NAME="64bit Amazon Linux 2023 v4.3.1 running Python 3.12"
-          OPTIONS_FILE="options.json"
 
-          # Create Environment if it doesn't exist
-          if ! aws elasticbeanstalk describe-environments \
-              --application-name "HelloWorldApp" \
-              --environment-names "$ENV_NAME" \
-              --region ca-central-1 | grep -q '"Status": "Ready"'; then
+          # Check if environment exists
+          aws elasticbeanstalk describe-environments \
+            --application-name "HelloWorldApp" \
+            --environment-names "${ENV_NAME}" \
+            --query "Environments[?Status=='Ready']" --output text || ENV_EXISTS=false
+
+          if [ -z "$ENV_EXISTS" ]; then
+            echo "Creating Elastic Beanstalk Environment..."
             aws elasticbeanstalk create-environment \
               --application-name "HelloWorldApp" \
-              --environment-name "$ENV_NAME" \
-              --solution-stack-name "$STACK_NAME" \
+              --environment-name "${ENV_NAME}" \
+              --solution-stack-name "${STACK_NAME}" \
               --version-label "${{ github.sha }}" \
-              --option-settings file://$OPTIONS_FILE
+              --option-settings file://options.json
           else
-            # Update Existing Environment
+            echo "Updating Elastic Beanstalk Environment..."
             aws elasticbeanstalk update-environment \
-              --environment-name "$ENV_NAME" \
+              --environment-name "${ENV_NAME}" \
               --version-label "${{ github.sha }}"
           fi
 
-      - name: Clean Up
+      - name: Final Summary
         run: |
-          rm -f app.zip
+          echo "Deployment Complete: Version ${{ github.sha }} deployed to Elastic Beanstalk."
